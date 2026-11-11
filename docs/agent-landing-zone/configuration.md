@@ -31,9 +31,11 @@ environments that may contain secrets.
 
 ### Candidate retrieval and citation behavior
 
-The customer runtime feature branch includes behavior not present in the
-unchanged upstream orchestrator pin. It takes effect only after selecting,
-reviewing and deploying that exact custom component revision.
+The delivered customer platform branch selects the published fork commit
+`72204060a055ed6081d0cc4d08d221275e907d1f` for the orchestrator and aligns its
+application definition. This behavior is not present in the original upstream
+pin. It takes effect only when deploying that selected custom revision; source
+publication and pin changes do not update a running application.
 
 The first-message fix permits `NO_RETRIEVAL_FOLLOWUP` only when there is a
 nonempty previous assistant answer; otherwise the turn retrieves as a question.

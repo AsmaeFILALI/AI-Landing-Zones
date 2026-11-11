@@ -18,10 +18,23 @@ Markdown worker. Customer access to that worker repository, template checkout
 and source repositories must be arranged separately. Never copy a developer's
 dirty component checkout or registry credentials as a delivery mechanism.
 
-The clean pinned baseline excludes uncommitted runtime experiments, including
-unpublished citation guards and packaging changes. New behavior requires
-reviewed component source, quality evidence and coordinated pins. An image tag
-containing a short commit ID does not prove a clean build.
+The customer branch now selects the tested runtime fixes from public forks:
+
+| Component repository | Source branch | Required full commit |
+| --- | --- | --- |
+| `AsmaeFILALI/agent-app-ui` | `feature/customer-build-feeds` | `132f70bf862a482433faf4fccbdbf09cf8f1e12a` |
+| `AsmaeFILALI/agent-app-orchestrator` | `feature/citation-guard` | `72204060a055ed6081d0cc4d08d221275e907d1f` |
+
+These are reviewed source candidates, not newly published upstream releases.
+Component tag fields are intentionally empty. The existing deployer uses the
+branch to fetch source and verifies its full commit before building; moving a
+branch to a different commit fails the pin check. The matching
+`app-definition.json` commits are updated together with the manifest.
+Use that delivered platform revision, not the fork's default component branch.
+Both clean Linux/amd64 image builds and offline checks passed, with a
+credential-free HTTPS package mirror required on the validation workstation.
+No registry image or Azure application update follows from publishing source.
+An image tag containing a short commit ID does not prove a clean build.
 
 ## 1. Prerequisites and policy
 
@@ -182,8 +195,11 @@ The parent deployment fetches the pinned components and checks tracked and
 untracked source cleanliness before copying the environment or building.
 Dirty component source fails without resetting files. Use a separate clean
 checkout or review/commit changes first. Do not work around the guard by hiding
-source edits with ignore flags. Pinned upstream builds are the supported baseline;
-authenticated corporate feed customization needs separate secure build review.
+source edits with ignore flags. The selected fork commits support credential-free
+HTTPS `PIP_INDEX_URL` overrides for local builds; the orchestrator also supports
+`NPM_CONFIG_REGISTRY`. Configure a customer-approved source if direct package
+artifact downloads are blocked. Authenticated feed customization needs a separate
+secure build-secret review; do not put credentials in these build arguments.
 
 Verify both active revisions, recorded image digests, authenticated UI access,
 orchestrator connectivity and a known-answer query. Do not infer success from
