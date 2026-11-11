@@ -29,6 +29,12 @@ azd env set NETWORK_ISOLATION true
 | `aiFoundryLocation` | — | `AZURE_AI_FOUNDRY_LOCATION` | Region for AI Foundry resources (if different from primary) |
 | `cosmosLocation` | — | `AZURE_COSMOS_LOCATION` | Region for Cosmos DB account |
 
+The independent foundation reference above is not an Agent parameter contract.
+The Agent foundation in `infra/` currently places its Foundry account in
+`location` (`AZURE_LOCATION`); it does not declare `aiFoundryLocation`.
+See [Agent configuration](../agent-landing-zone/configuration.md#values-set-by-azd-or-by-you)
+before reusing location inputs across the two deployment sources.
+
 ## Identity and access
 
 | Parameter | Default | Env variable | Description |

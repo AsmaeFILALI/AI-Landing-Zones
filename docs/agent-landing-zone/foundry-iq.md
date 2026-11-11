@@ -1,5 +1,10 @@
 # Foundry IQ
 
+For a customer-owned Markdown worker, see the
+[private customer POC runbook](azure-devops-markdown-poc.md). An exported schema
+hash or owner-declared non-serving status does not establish current serving
+bindings, live retrieval access or publication approval.
+
 A **knowledge source** describes searchable content. A **knowledge base** binds
 one or more sources and controls retrieval. Foundry Agent Service can call that
 knowledge base as a native tool, so the agent can ground answers in retrieved
@@ -27,8 +32,11 @@ disabled by default for new environments and is not needed for this source.
 and custom processing.
 
 An existing Search index can be registered as a `searchIndex` knowledge source.
-The pipeline that owns that index remains responsible for its content, schema
-and permission metadata. Registering it does not populate or authorize it.
+The index's designated owners remain responsible for its content, schema
+and permission metadata. For the platform-owned Markdown contract, platform
+deployment owns the schema and the independent ingestion worker owns documents;
+see [Markdown index deployment](ingestion.md#platform-owned-markdown-index-deployment).
+Registering an index does not populate or authorize it.
 Microsoft documents [Blob sources](https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-blob)
 and [Search index sources](https://learn.microsoft.com/azure/search/agentic-knowledge-source-how-to-search-index)
 separately.

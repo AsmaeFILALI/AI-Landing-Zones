@@ -2,6 +2,11 @@
 
 # Deploy infra only
 
+For the fork's private classic/Markdown configuration, use the reviewed
+[customer profile and bootstrap sequence](azure-devops-markdown-poc.md).
+The standalone ingestion-state account is a separate deployment, not an
+automatic effect of this runbook.
+
 ## Objective
 
 Provision the Azure foundation without building or deploying application images.
@@ -281,6 +286,19 @@ python -m config.deployment.outputs
 ```
 
 This does not replace deferred or failed service configuration.
+
+If infrastructure succeeded but post-provision reports missing or ambiguous
+resource discovery, check project-local Azure CLI defaults and explicit Cosmos
+account selection in [deployment settings](configuration.md#inputs-that-use-bicep-defaults).
+Correct those inputs and rerun `azd hooks run postprovision`; do not recreate
+successful infrastructure or disable access controls to bypass the error.
+
+An ARM `Succeeded` result does not prove service configuration completed.
+For a Key Vault `ForbiddenByConnection` failure, compare the live vault network
+settings with the approved deployment posture and investigate any persistent
+enforcement with the resource administrator. Do not skip governance or disable
+authentication to continue. Confirm that Search indexes and knowledge objects
+exist after the post-provision hook succeeds.
 
 <span id="lifecycle"></span>
 

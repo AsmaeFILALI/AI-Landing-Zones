@@ -1,5 +1,10 @@
 # Deploy applications with Azure DevOps
 
+This application/foundation promotion pipeline is distinct from the independent
+Markdown ingestion pipeline. Use the
+[customer Markdown POC runbook](azure-devops-markdown-poc.md) for private runner
+requirements, the state-store handoff and worker/source admission.
+
 ## Objective
 
 Promote one reviewed application revision through **DEV → TEST → PROD** with
@@ -205,8 +210,7 @@ reapply approved inputs. Keep `.azure` and sibling child state private.
 | `REPLACE_DEV_WIF_SERVICE_CONNECTION`, `REPLACE_TEST_WIF_SERVICE_CONNECTION`, `REPLACE_PROD_WIF_SERVICE_CONNECTION` | Exact Azure DevOps WIF service connection names, authorized for this pipeline only. |
 | `REPLACE_DEV_SUBSCRIPTION_ID`, `REPLACE_TEST_SUBSCRIPTION_ID`, `REPLACE_PROD_SUBSCRIPTION_ID` | Target subscription GUIDs matching those connections' allowed scopes. |
 | `REPLACE_DEV_RESOURCE_GROUP`, `REPLACE_TEST_RESOURCE_GROUP`, `REPLACE_PROD_RESOURCE_GROUP` | New target names for first provision, or the exact previously azd-provisioned groups for redeployment. |
-| `REPLACE_DEV_REGION`, `REPLACE_TEST_REGION`, `REPLACE_PROD_REGION` | Supported foundation locations (`AZURE_LOCATION`). |
-| `REPLACE_DEV_FOUNDRY_REGION`, `REPLACE_TEST_FOUNDRY_REGION`, `REPLACE_PROD_FOUNDRY_REGION` | Foundry/model locations with quota (`AZURE_AI_FOUNDRY_LOCATION`). |
+| `REPLACE_DEV_REGION`, `REPLACE_TEST_REGION`, `REPLACE_PROD_REGION` | Supported foundation and Foundry/model locations with quota (`AZURE_LOCATION`). |
 | `REPLACE_DEV_COSMOS_REGION`, `REPLACE_TEST_COSMOS_REGION`, `REPLACE_PROD_COSMOS_REGION` | Cosmos locations supported by the selected topology/foundation (`AZURE_COSMOS_LOCATION`). |
 | `REPLACE_DEV_SERVICE_PRINCIPAL_OBJECT_ID`, `REPLACE_TEST_SERVICE_PRINCIPAL_OBJECT_ID`, `REPLACE_PROD_SERVICE_PRINCIPAL_OBJECT_ID` | Connection service principal **object IDs**; keep `AZURE_PRINCIPAL_TYPE: ServicePrincipal`. |
 | `REPLACE_DEV_HOSTED_RESOURCE_SCOPE`, `REPLACE_TEST_HOSTED_RESOURCE_SCOPE`, `REPLACE_PROD_HOSTED_RESOURCE_SCOPE` | Explicit delegated-user Foundry scope ending in `/.default`, matched to the deployed audience and consent (for example `https://ai.azure.com/.default` where that is the target audience). Required before provisioning; not the UI's `api://<client-id>/user_impersonation` scope. |

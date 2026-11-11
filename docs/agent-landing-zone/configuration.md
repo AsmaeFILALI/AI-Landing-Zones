@@ -29,6 +29,47 @@ environments that may contain secrets.
 
 ## Environment boundaries
 
+### Candidate retrieval and citation behavior
+
+The customer runtime feature branch includes behavior not present in the
+unchanged upstream orchestrator pin. It takes effect only after selecting,
+reviewing and deploying that exact custom component revision.
+
+The first-message fix permits `NO_RETRIEVAL_FOLLOWUP` only when there is a
+nonempty previous assistant answer; otherwise the turn retrieves as a question.
+Greetings retain their normal no-retrieval behavior. This applies to `maf_lite`
+and multimodal strategies.
+
+For the candidate `maf_lite` implementation, `CITATION_GUARD_MODE` defaults to
+`enforce`: streaming Markdown links not found in current retrieval or previous
+assistant messages become plain label text, and repeated source links are
+simplified. The stored answer matches the sanitized stream. `log_only` preserves
+output and logs counts; `off` disables inspection; unknown values enforce.
+Configure it through the component's supported App Configuration path, with
+the normal label precedence, and restart/reload as required by that revision.
+
+This is not factual verification, URL reachability or document authorization.
+Bare URLs, autolinks and reference-style links are not covered. Links inherited
+from older assistant messages have no independently proven retrieval provenance.
+Test current and old conversations, split-token links, output/history agreement
+and all modes before changing the deployed component pin. Rolling back uses
+the previous compatible image/configuration; a local commit alone changes
+neither the image nor the platform manifest.
+
+### Private Azure DevOps Markdown customer profile
+
+The [customer POC runbook](azure-devops-markdown-poc.md) provides the exact
+classic/private/Markdown selection and separates fresh inputs from outputs.
+`COSMOS_ACCOUNT_NAME` is an optional deployment input mapped to `dbAccountName`;
+empty selects generated naming. Existing environments must persist their actual
+account name before adopting that change. `DATABASE_ACCOUNT_NAME` remains an
+output/runtime binding, not the override.
+
+An explicitly set `AGENT_STRATEGY` is validated and published by both platform
+configuration paths under `agent-lz`. If absent, the platform does not override
+the component's strategy default. The profile selects `maf_lite`; a raw azd
+variable without an implemented publication path is not a general runtime API.
+
 DEV, TEST and PROD need separate azd environments and resource groups.
 Separate subscriptions strengthen administrative and quota boundaries.
 Permissions, identities and dedicated stores enforce the following boundaries.
@@ -63,7 +104,7 @@ that identity in the Entra directory; it is not an application's client ID.
 | Variable | Description |
 | --- | --- |
 | `AZURE_ENV_NAME` | Environment name. Set by `azd env new`. Used to derive resource names. |
-| `AZURE_LOCATION` | Primary Azure region. `azd` asks for it on the first `azd up`. |
+| `AZURE_LOCATION` | Primary Azure region, including the Microsoft Foundry account. `azd` asks for it on the first `azd up`. |
 | `AZURE_PRINCIPAL_ID` | Object ID of the deployment identity that receives roles for service setup and access. Set by `azd` from your signed-in account. |
 
 ### Inputs that use Bicep defaults
@@ -74,7 +115,6 @@ When unset, they use the template defaults shown below.
 | Variable | Template default | Description |
 | --- | --- | --- |
 | `NETWORK_ISOLATION` | `false` | Enables private networking. Jumpbox, Bastion and firewall deployment also depend on their component flags. See [Network isolation](network-isolation.md). |
-| `AZURE_AI_FOUNDRY_LOCATION` | Deployment region | Region for the Microsoft Foundry account. |
 | `AZURE_COSMOS_LOCATION` | Deployment region | Region for Agent Application Cosmos DB. |
 | `USE_UAI` | `false` | Uses user-assigned managed identities instead of system-assigned identities. |
 | `ENABLE_AGENTIC_RETRIEVAL` | `false` | Enables the template's agentic retrieval resource configuration. This is separate from the Agent Application setting `RETRIEVAL_BACKEND`. |
@@ -82,6 +122,26 @@ When unset, they use the template defaults shown below.
 | `EXISTING_VNET_RESOURCE_ID` | Empty | Resource ID required when reusing a virtual network. |
 | `DEPLOY_SUBNETS` | `true` | Creates the required subnets in the selected virtual network. |
 | `SIDE_BY_SIDE` | `true` | Uses the deployment resource group for private endpoints and DNS zones rather than placing them in the existing VNet's resource group. |
+
+The Agent foundation places the Foundry account in `AZURE_LOCATION`.
+`AZURE_AI_FOUNDRY_LOCATION` is not a separate account-location override in this
+parameter set. Before provisioning an older checkout, verify that its parameter
+file does not supply an undeclared `aiFoundryLocation` parameter. Changing a local
+environment variable does not add that parameter to the Bicep template.
+
+For split-region deployments, do not rely on a workstation-wide Azure CLI
+location default for resource discovery. Inspect `az configure --list-defaults`;
+if it hides resources outside that location, clear the inherited filter only
+for this project with `az configure --scope local --defaults location=`.
+Keep explicit deployment regions in the azd environment.
+
+The PowerShell post-provision hook clears the location filter on its resource
+and project discovery calls. If more than one application Cosmos account is
+present, set `DATABASE_ACCOUNT_NAME` to the exact account selected by the native
+`dbAccountName` deployment input before rerunning configuration. This selects
+the account for post-provision discovery; it does not rename, move, or delete
+an account. Do not select an arbitrary first match or delete failed resources
+without separate approval.
 
 ### General
 
@@ -129,11 +189,33 @@ Omission supports native Foundry IQ `azureBlob`, or an explicitly configured,
 independently populated `SEARCH_RAG_INDEX_NAME` for `ai_search` / Foundry IQ
 `searchIndex`. It does not select a strategy, configure SharePoint, rewrite
 source configuration, populate an index or remove authorization.
+For the platform-owned Azure DevOps Markdown schema, select
+`SEARCH_RAG_SCHEMA=ado_markdown_v1` and persist the intended
+`SEARCH_RAG_INDEX_NAME`. Post-provisioning creates or validates that schema
+before registering its serving binding. The separate
+[index-only command](ingestion.md#platform-owned-markdown-index-deployment)
+is still available without changing application configuration or bindings.
 `FOUNDRY_IQ_CONVERSATION_UPLOAD_ENABLED=true` requires the app.
 
 See [Ingestion](ingestion.md) for native ingestion, conversation uploads and
 custom processing. Disabling the component does not delete existing resources
 or revoke their grants.
+
+### RAG index schema selection
+
+| Variable | Default | Description |
+| --- | --- | --- |
+| `SEARCH_RAG_SCHEMA` | `standard` | Setup-only selector under `agent-lz`. `ado_markdown_v1` enables the platform-owned Azure DevOps Markdown contract and create-or-validate provisioning. |
+| `SEARCH_RAG_INDEX_NAME` | Generated RAG name | Explicit physical target required for `ado_markdown_v1`; used for schema provisioning and the Foundry IQ `searchIndex` binding. |
+| `FOUNDRY_IQ_SEARCH_INDEX_NAME` | Environment's legacy override | If explicitly set with the Markdown schema, it must equal `SEARCH_RAG_INDEX_NAME`. Keep both aligned when migrating an existing environment. |
+
+The Markdown selector supports direct Search (`ai_search`) or Foundry IQ
+`searchIndex`; it is rejected for native Blob ingestion. It does not enable
+the bundled ingestion app, configure document authorization or run ingestion.
+Standard environments are unchanged. Existing incompatible Markdown indexes
+fail closed without deletion or schema modification. See
+[Markdown index deployment](ingestion.md#platform-owned-markdown-index-deployment)
+for private-runner requirements, generation cutover and recovery.
 
 ### Search region and quota
 
@@ -248,6 +330,12 @@ These parameters apply mainly when `NETWORK_ISOLATION=true`.
 | `DEPLOY_BASTION` | Enabled with network isolation and jumpbox deployment | Deploys Azure Bastion unless an existing Bastion is selected. |
 | `BASTION_SKU_NAME` | `Standard` | Bastion SKU. |
 | `DEPLOY_NAT_GATEWAY` | Enabled with network isolation and jumpbox deployment | Deploys a NAT gateway unless an existing gateway is selected. |
+| `DEPLOY_VPN_GATEWAY` | `false` | With isolation, deploys an Entra/OpenVPN point-to-site gateway and a DNS Private Resolver inbound endpoint. Incurs ongoing charges. |
+| `VPN_CLIENT_ADDRESS_POOL` | Empty | Required IPv4 client CIDR, outside the VNet and all connected network ranges. |
+| `VPN_DNS_RESOLVER_SUBNET_PREFIX` | Empty | Required dedicated resolver subnet CIDR inside the VNet, separate from other subnets. |
+| `VPN_TENANT_ID` | Deployment tenant | Entra directory for VPN authentication; empty resolves to the subscription tenant. |
+| `VPN_GATEWAY_SKU` | `VpnGw1AZ` | Gateway SKU; `VpnGw1AZ` or `VpnGw2AZ`. |
+| `VPN_AUDIENCE` | Microsoft Azure VPN Client audience | Defaults to `c632b3df-fb67-4d84-bdcf-b95ad541b5c8` in public Azure. Change only for an approved registered VPN application. |
 | `ENABLE_ACS_MEDIA_EGRESS` | `false` | Opens firewall egress for Azure Communication Services media. |
 | `DEPLOY_GROUNDING_WITH_BING` | `false` | Deploys Grounding with Bing Search. |
 | `DEPLOY_KEY_VAULT` | `true` | Deploys the Agent Application Key Vault. |
@@ -260,6 +348,19 @@ These parameters apply mainly when `NETWORK_ISOLATION=true`.
 | `DEPLOY_STORAGE_ACCOUNT` | `true` | Deploys the document storage account. |
 
 Bastion tunneling is disabled by default.
+
+The optional VPN uses a reserved `GatewaySubnet` and a dedicated delegated DNS
+subnet. It does not install a client or sign in on the operator's computer.
+See [Private access over VPN](private-access.md) for client DNS and the
+connected-runner gate.
+
+For a reviewed parallel application migration, `CONTAINER_ENV_NAME`,
+`FRONTEND_APP_NAME`, `ORCHESTRATOR_APP_NAME`, and `DATA_INGEST_APP_NAME` can
+select explicit resource names. Existing defaults remain unchanged when absent.
+The Container Apps network type cannot be changed in place; create a new
+VNet-integrated environment, retain old resources until validation, and ensure
+configuration and identity discovery select the new names. Do not delete the
+old environment or apply a blind isolation toggle.
 
 ### Hub integration
 

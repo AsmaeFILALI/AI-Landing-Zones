@@ -74,6 +74,7 @@ nav:
           - "Teams & M365": agent-landing-zone/publish-to-teams.md
           - "Copilot Studio": agent-landing-zone/connect-copilot-studio.md
           - "Azure DevOps": agent-landing-zone/azure-devops.md
+          - "Azure DevOps Markdown POC": agent-landing-zone/azure-devops-markdown-poc.md
       - "Terraform templates": agent-landing-zone/terraform.md
       - "Deploy via portal": agent-landing-zone/portal.md
       - "Troubleshooting": agent-landing-zone/troubleshooting.md

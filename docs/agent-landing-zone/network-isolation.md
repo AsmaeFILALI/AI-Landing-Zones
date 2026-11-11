@@ -1,5 +1,10 @@
 # Network isolation
 
+For a reproducible classic/private external-Markdown deployment, follow the
+[customer POC runbook](azure-devops-markdown-poc.md). Its retained CIDRs require
+the normal overlap check; private endpoint DNS, laptop VPN access and pipeline
+agent connectivity are separate acceptance checks.
+
 Private networking is selected with the `NETWORK_ISOLATION` deployment input,
 which defaults to `false`. This page explains connectivity, DNS and build
 requirements rather than deployment steps. [How it works](how-it-works.md)
@@ -45,6 +50,7 @@ private endpoint; it does not require the Activity-route public exception.
 | Jumpbox, Azure Bastion, NAT gateway | Not deployed by default | Deployed by default |
 | Container image builds | Local Docker or regular ACR Tasks | ACR Task agent pool inside the VNet by default |
 | Post-provision and deploy | Run from an authorized host that can reach the endpoints | Run from an authorized host connected to the VNet |
+| Point-to-site VPN | Not deployed | Optional, explicitly selected with `DEPLOY_VPN_GATEWAY=true`; includes an inbound DNS resolver |
 
 !!! note
     The ACR Task agent pool is created only for isolated deployments. When isolation is off, supported components can build with local Docker or regular ACR Tasks. No pool is created, even if `DEPLOY_ACR_TASK_AGENT_POOL` is `true`.
@@ -75,6 +81,27 @@ Private services can be reached through:
 - **Point-to-site or site-to-site VPN** into the landing zone VNet or a peered hub.
 - **A VM or build agent** in the VNet or a peered VNet, with private DNS zone access.
 - **The jumpbox VM** deployed by the landing zone, reached through Azure Bastion.
+
+The optional template VPN is tenant-bound Entra authentication over OpenVPN,
+using Azure VPN Client. It is not enabled just by selecting isolation.
+Client installation, profile import, sign-in and DNS configuration are still
+required; see [Private access](private-access.md).
+
+Internal Container Apps ingress needs a private zone for the environment's
+default domain with a wildcard record to its static IP. Template-managed DNS
+creates this zone in addition to the service Private Link zones. With
+policy-managed DNS, the DNS owner must provide the equivalent records.
+
+If provisioning the private network before a laptop can connect, explicitly
+defer data-plane configuration with `RUN_FROM_JUMPBOX=false`. Provisioning can
+complete, but service setup and application deployment remain incomplete.
+After connecting and verifying private DNS/TLS, set `RUN_FROM_JUMPBOX=true`,
+clear any legacy warning deferral, and rerun post-provision.
+
+Existing public Container Apps environments require a new VNet-integrated
+environment rather than an in-place network conversion. In regions without an
+ACR Tasks dedicated pool, use `BUILD_MODE=local` with Docker on a connected host;
+do not provision an unsupported regional pool.
 
 <span id="use-the-jumpbox"></span>
 
@@ -161,6 +188,20 @@ requires `BUILD_MODE=local`. Each remaining service must support local builds
 for that exception to work.
 
 ### Application-specific package feeds
+
+The customer component feature branches add **local-build-only** overrides:
+UI accepts `PIP_INDEX_URL`; orchestrator accepts `PIP_INDEX_URL` and
+`NPM_CONFIG_REGISTRY`. They do not change ACR Task builds or dependency versions.
+Only credential-free HTTPS URLs without user information, query strings or
+fragments are accepted. Do not put PATs, passwords, signed URLs or other secrets
+in these variables, Docker arguments, build logs or image metadata. Use a
+separately reviewed build-secret integration for authenticated feeds. Avoid
+debug shell tracing when handling any credential-bearing environment.
+
+The UI candidate also repeats installation after source packages have built
+wheel metadata and runs `pip check`. This addresses incomplete feed metadata;
+it is not a dependency version upgrade or a substitute for a clean image build.
+These changes require the custom component revision, not just platform settings.
 
 The root deployment defaults include dependency-verified package feed
 destinations alongside common language and OS package registries, through

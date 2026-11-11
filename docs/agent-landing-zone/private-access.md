@@ -1,5 +1,10 @@
 # Private access over VPN
 
+The [customer Markdown POC guide](azure-devops-markdown-poc.md) supplies the
+retained address profile and exact deferred/connected phase inputs. Use each
+new deployment's resolver and gateway outputs, never a developer's saved IPs
+or exported VPN profile.
+
 ## Objective
 
 Connect a deployment host or developer workstation to an isolated Agent Landing
@@ -15,9 +20,10 @@ without using a jumpbox. Reuse an approved corporate VPN when available; create
 a new gateway only with the network owner's approval.
 
 The foundation creates private endpoints and DNS zones when isolation is
-enabled. It does **not** create a VPN gateway, configure P2S authentication,
-issue certificates, distribute client profiles or create a DNS Private
-Resolver. These tasks need network administration outside `azd`.
+enabled. An optional `DEPLOY_VPN_GATEWAY=true` adds a route-based Entra/OpenVPN
+gateway and DNS Private Resolver inbound endpoint. The default is off.
+It does not issue certificates, install VPN client software, import profiles
+or perform interactive user sign-in. Existing corporate VPN remains an option.
 
 <span id="before-you-start"></span>
 
@@ -62,7 +68,7 @@ Choose one network path:
 
 | Path | Foundation inputs and network work |
 | --- | --- |
-| Standalone VNet | Keep `DEPLOYMENT_MODE=standalone`. The administrator adds a route-based Azure VPN Gateway and P2S configuration to the target VNet separately. |
+| Standalone VNet | Keep `DEPLOYMENT_MODE=standalone`. Explicitly select the optional gateway below, or have the administrator supply an approved existing VPN/DNS path. |
 | Existing hub VPN | Set `DEPLOYMENT_MODE=ailz-integrated` and `HUB_INTEGRATION_HUB_VNET_RESOURCE_ID` to the hub's full ARM resource ID. Reuse its approved gateway, P2S policy and DNS path, and configure gateway transit and client routes as described below. |
 
 For a newly created spoke using a hub-owned gateway, the shipped inputs are:
@@ -93,6 +99,50 @@ not configure P2S client routes or authentication. Use the
 For a fresh VPN-only deployment, you may explicitly set `DEPLOY_JUMPBOX=false`
 and `DEPLOY_BASTION=false` before provisioning. They otherwise default on for
 isolation. Verify the VPN before removing an existing access path.
+
+### Optional template-managed Entra VPN
+
+After approving non-overlapping ranges and ongoing gateway/resolver costs:
+
+```bash
+azd env set NETWORK_ISOLATION true
+azd env set DEPLOY_VPN_GATEWAY true
+azd env set VPN_CLIENT_ADDRESS_POOL <approved-client-ipv4-cidr>
+azd env set VPN_DNS_RESOLVER_SUBNET_PREFIX <approved-dedicated-subnet-cidr>
+azd env set VPN_GATEWAY_SKU VpnGw1AZ
+```
+
+The DNS subnet must be contained in the configured VNet and separate from the
+other subnets. Update the reviewed native VNet/subnet parameters consistently;
+changing an environment variable that is not mapped in the parameter file has
+no effect. The gateway uses `GatewaySubnet`, without an NSG or route table.
+The Microsoft-registered Azure VPN Client audience and the subscription tenant
+are used unless explicitly overridden with approved values.
+
+For an internal Container Apps environment with template-managed DNS, the
+template also creates a private zone for the environment's default domain and
+a wildcard A record to its static ingress address. This is separate from the
+`privatelink.<region>.azurecontainerapps.io` zone. When private DNS is managed
+by policy, arrange the equivalent internal-domain records with that owner.
+
+The root template already has the ARM limit of 64 outputs. Read the gateway
+name, ID, public IP and DNS address from the nested deployment:
+
+```bash
+az deployment group show --resource-group <network-resource-group> \
+  --name pointToSiteVpnDeployment --query properties.outputs
+```
+
+Download the gateway's Azure VPN Client profile, import it into Azure VPN
+Client, and configure its custom DNS server as the reported inbound resolver
+address. Use split-tunnel routes for the approved VNet; DNS links alone do not
+configure the laptop. Never print or commit a signed profile-download URL.
+Validate private endpoint resolution and authenticated HTTPS access after
+interactive sign-in. VPN authentication does not grant application/document
+permissions.
+
+The following manual gateway setup section is for a gateway not managed by the
+optional template. Do not create a second gateway in the same VNet.
 
 Provision using the [Deploy infra only runbook](deploy-infra-only.md). If the VPN
 cannot exist until the VNet is provisioned, use that runbook's deferred

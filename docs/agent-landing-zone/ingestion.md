@@ -1,5 +1,10 @@
 # Ingestion and conversation uploads
 
+The [customer Markdown POC runbook](azure-devops-markdown-poc.md) connects
+platform provisioning, the separate control-state store and the independent
+worker. Its offline handoff exporter checks exact customer schema/model/bindings
+but does not grant access, create source admission or authorize publication.
+
 Foundry IQ provides the standard source-ingestion path. Conversation attachments
 and custom processing are separate capabilities that can require optional
 **Agent App Ingestion**.
@@ -121,6 +126,184 @@ custom application definitions retain their declared components. Selection does
 not change retrieval bindings or document authorization.
 Omitting the application does not delete deployed resources, indexed documents
 or identity grants; retirement needs separate authorization.
+
+### Platform-owned Markdown index deployment
+
+An independent Azure DevOps Markdown worker owns document synchronization,
+not the Search schema. The platform's `contracts/ado-markdown-index-consumer-v1.json`
+pins the draft consumer requirements; it is **not** a deployable index body.
+The authoritative RAG index definition is `config/search/rag-index.j2`, shared
+with the normal Search setup through `search.j2`.
+
+The opt-in Markdown rendering adds source/section/line/pipeline metadata,
+explicit `parent_id` filtering and the `semantic-config` priorities:
+title `title`, content `content`, keywords `heading_path`, then `category`.
+It retains bundled platform fields, 3072-dimensional `contentVector`,
+HNSW/cosine, and the Azure OpenAI query vectorizer using the same
+`text-embedding-3-large` model as ingestion.
+
+For repeatable provisioning of a serving Markdown index, explicitly select:
+
+```powershell
+azd env set SEARCH_RAG_SCHEMA ado_markdown_v1
+azd env set SEARCH_RAG_INDEX_NAME kb-sections-ingestion-test-v1
+azd env set FOUNDRY_IQ_SEARCH_INDEX_NAME kb-sections-ingestion-test-v1
+azd env set RETRIEVAL_BACKEND foundry_iq
+azd env set FOUNDRY_IQ_PATTERN searchIndex
+azd env set FOUNDRY_IQ_KNOWLEDGE_SOURCE_KIND searchIndex
+```
+
+`SEARCH_RAG_SCHEMA` is a platform setup selector published under `agent-lz`,
+not an application runtime strategy. Its default `standard` preserves existing
+deployments. `ado_markdown_v1` requires an explicit index name and either
+`ai_search` or Foundry IQ `searchIndex` retrieval; conflicting legacy index-name
+overrides and native Blob selections fail validation.
+
+Pre-provisioning publishes this selection through the existing generic
+`additionalAppConfigurationSettings` parameter. Both post-provision hooks
+publish it consistently. Search setup renders the same shared definition and
+uses the standalone command's create-or-validate implementation **before**
+knowledge-source/base reconciliation. A compatible existing Markdown index is
+not written, additively updated, dropped or recreated; its documents are not
+modified. Missing indexes are created conditionally and read-back validated.
+Schema/vectorizer/semantic mismatches abort before other index writes and
+knowledge cleanup. Other standard indexes keep their existing behavior.
+
+Persist the knowledge-source/base names and embedding binding for the target
+environment as well. A portal-only change is not durable deployment intent.
+If you create the knowledge source yourself, set `sourceDataFields` to include at
+least `url`, `filepath`, `title`, `content` and `heading_path`. Without a
+projected `url`/`filepath` the retrieval response has no citation link, and the
+model may fabricate one.
+An index becomes a serving target once a knowledge source/base or application
+references it, regardless of a `test` substring in its name. For incompatible
+schema revisions, create a new generation and validate an approved cutover;
+do not reset a populated index or switch the selector just to avoid a failure.
+
+The internal render-only `MARKDOWN_INDEX` input remains for template reuse; it
+is not an environment-variable substitute for `SEARCH_RAG_SCHEMA`. No new
+application component version or Search indexer is required. Ingestion still
+pushes documents directly; state Blob storage is not a Search data source.
+
+Run the platform-owned **index-only command** after infrastructure and identity
+provisioning. Use the repository's existing Python environment with
+`config/requirements.txt` installed, a private-network-connected runner, and an
+approved deployment identity with Search schema-management permissions.
+The worker's separate document-writer identity need not manage schemas.
+
+```powershell
+# Read-only preflight; exports a deployable definition and its SHA-256 sidecar.
+python -m config.search.markdown_index `
+  --search-endpoint https://<search-service>.search.windows.net `
+  --index-name kb-sections-ingestion-test-v1 `
+  --embedding-endpoint https://<foundry-account>.openai.azure.com `
+  --embedding-deployment text-embedding `
+  --schema-output .\markdown-index.schema.json
+
+# After reviewing the exact target and obtaining approval, run the same command
+# with --apply. It conditionally creates only a missing named index.
+```
+
+The command defaults to Search API `2025-05-01-preview`, matching the platform
+schema's permission annotations; this is independent of the worker's OpenAI
+inference API version. A missing index is created with `If-None-Match: *` and
+read back for validation. A compatible existing index is validated without a
+write. Any incompatible field, vectorizer binding or semantic priority fails
+explicitly; the command never adds fields, drops/recreates indexes, changes
+documents, publishes App Configuration, or reconciles knowledge objects.
+After a concurrent/ambiguous create failure, rerun read-only validation rather
+than deleting the index.
+
+Do not invoke the full post-provision hook just to create a test index: full
+Search setup also reconciles knowledge sources and knowledge bases. The
+standalone command reuses its conditional index API helpers without running
+that broader flow. Keep the application index setting and Foundry IQ bindings
+unchanged while testing a non-serving target.
+
+Give the ingestion project the exported **platform schema and its exact hash**,
+consumer contract version/hash, target endpoint/name and embedding binding.
+Publishing must fail before writes if the target or pinned definition is
+incompatible. Physical field count can exceed the 23 required consumer fields.
+Provisioning proves schema compatibility only: citations, source synchronization,
+model consistency, vectorizer execution and allowed/denied retrieval still need
+their own tests. The draft's authorization/principal mapping is unresolved;
+use only synthetic or explicitly approved non-sensitive content until settled.
+
+### Independent worker control-state storage
+
+An independent Azure DevOps Markdown worker can publish directly to Search
+without staging Markdown in Blob or creating a Search indexer. Keep its
+**control state** separate from the accelerator's document/upload storage.
+The optional standalone `infra/ingestion-state.bicep` entry point creates:
+
+- A dedicated ingestion resource group and StorageV2 Standard_LRS/Hot account.
+- One private `ingestion-state` container.
+- Blob versioning and 14-day Blob/container soft-delete retention, without an
+  automatic expiration policy or container-wide WORM/legal hold.
+- A Blob private endpoint using an existing endpoint subnet and Blob private
+  DNS zone. It does not create another VNet, zone, resolver or VPN gateway.
+- One explicit container-scoped Storage Blob Data Contributor assignment.
+  Supply a worker's managed identity/WIF service principal for automation, or
+  an explicitly approved user for development. It does not grant Search,
+  UI or orchestrator identities access.
+
+The account disables public network access, anonymous Blob access and Shared
+Key, and requires HTTPS/TLS 1.2+. Retention, location, resource names and
+container name are explicit parameters. LRS is suitable for the approved POC,
+not a substitute for a reviewed regional recovery strategy.
+
+Deploy this entry point **independently**, not through a full accelerator
+reprovision or post-provision hook. Use Azure CLI with reviewed native ARM
+parameters in a local `state.parameters.json` file. Include `environmentName`,
+`location`, `privateEndpointSubnetResourceId`, `blobPrivateDnsZoneResourceId`,
+`writerPrincipalId`, and `writerPrincipalType` (`ServicePrincipal` by default).
+The subnet must be in the same region as the endpoint. Use optional
+`ingestionResourceGroupName` and `storageAccountName` overrides to preserve
+existing resource identities on subsequent deployments.
+
+```powershell
+az deployment sub validate --subscription <subscription-id> --location <region> `
+  --template-file .\infra\ingestion-state.bicep --parameters .\state.parameters.json
+az deployment sub what-if --subscription <subscription-id> --location <region> `
+  --template-file .\infra\ingestion-state.bicep --parameters .\state.parameters.json
+# Review and approve the additive resource plan before execution.
+az deployment sub create --name ingestion-state --subscription <subscription-id> `
+  --location <region> --template-file .\infra\ingestion-state.bicep `
+  --parameters .\state.parameters.json
+```
+
+Outputs under `ingestionState` expose nonsecret account/Blob endpoint, container,
+resource group, private endpoint and the writer assignment. They do not change
+the platform's existing `STORAGE_ACCOUNT_NAME`, document containers, App
+Configuration keys or retrieval bindings. Never supply storage keys or a SAS.
+
+Bicep leaves the container empty. The worker creates virtual prefixes and JSON:
+
+```text
+ingestion-state/
+  indexes/<physical-index-id>/
+    publisher.json
+    scopes/<source-id>/
+      checkpoints/<manifest-id>.json
+      runs/<manifest-id>.json
+```
+
+Use a renewable lease on the mutable publisher blob and conditional writes;
+create run intents and successful checkpoints with create-only conditions.
+Write intent before Search mutations, verify all expected document results,
+then create a successful checkpoint and conditionally advance committed
+pointers. A Blob lease does not fence Search writes or provide an atomic
+Search/Blob transaction. Stop new writes after lease loss and reconcile partial
+or ambiguous outcomes before committing. Do not select committed state solely
+by the latest timestamp. Never infer deletions from failed/partial enumeration
+or blindly age-delete referenced checkpoints and unresolved intents. Prefixes
+are not independent RBAC boundaries.
+
+The publishing runner needs **its own** private routing/DNS and Entra access;
+a laptop VPN does not connect Microsoft-hosted pipeline agents. Before wiring
+the worker, test authenticated conditional create/update and lease contention
+with disposable blobs over the private endpoint. A successful ARM deployment
+alone does not establish worker readiness or protected retrieval.
 
 <span id="authorization-remains-a-design-requirement"></span>
 <span id="related-references"></span>
