@@ -22,17 +22,24 @@ The customer branch now selects the tested runtime fixes from public forks:
 
 | Component repository | Source branch | Required full commit |
 | --- | --- | --- |
-| `AsmaeFILALI/agent-app-ui` | `feature/customer-build-feeds` | `132f70bf862a482433faf4fccbdbf09cf8f1e12a` |
-| `AsmaeFILALI/agent-app-orchestrator` | `feature/citation-guard` | `72204060a055ed6081d0cc4d08d221275e907d1f` |
+| `AsmaeFILALI/agent-app-ui` | `feature/customer-build-feeds` | `7ff09f49325d91018b2d443f993edf9b4cfd042d` |
+| `AsmaeFILALI/agent-app-orchestrator` | `feature/citation-guard` | `a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` |
 
 These are reviewed source candidates, not newly published upstream releases.
 Component tag fields are intentionally empty. The existing deployer uses the
 branch to fetch source and verifies its full commit before building; moving a
 branch to a different commit fails the pin check. The matching
 `app-definition.json` commits are updated together with the manifest.
+Each fork also records its real upstream release repo/tag/commit separately,
+so runtime compatibility checks do not mistake an empty source locator tag
+for an unknown software version. That provenance is not a new release tag.
 Use that delivered platform revision, not the fork's default component branch.
-Both clean Linux/amd64 image builds and offline checks passed, with a
-credential-free HTTPS package mirror required on the validation workstation.
+Initial candidate images at UI `132f70b` and orchestrator `7220406` passed
+clean Linux/amd64 builds with a credential-free HTTPS mirror. The later
+review fixes selected above pass focused regression/renderer and explicit
+build-exclusion checks. Docker engine errors currently prevent rebuilding
+those latest revisions and executing their synthetic layer-export checks;
+run those tests and build the selected revisions on a working customer runner.
 No registry image or Azure application update follows from publishing source.
 An image tag containing a short commit ID does not prove a clean build.
 

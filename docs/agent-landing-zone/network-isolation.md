@@ -203,6 +203,13 @@ wheel metadata and runs `pip check`. This addresses incomplete feed metadata;
 it is not a dependency version upgrade or a substitute for a clean image build.
 These changes require the custom component revision, not just platform settings.
 
+The selected customer components also exclude root/nested `.env*`, local
+configuration/state, upload caches, logs and cache directories from Docker
+contexts. Git status alone does not detect ignored files, so do not equate a
+clean worktree with a safe COPY-all context. Keep the Docker exclusions and
+their synthetic context-export regression tests. Supplying arbitrary secrets
+in other source files is still prohibited; exclusions are not secret detection.
+
 The root deployment defaults include dependency-verified package feed
 destinations alongside common language and OS package registries, through
 the scoped infrastructure build-egress configuration. This is a build-only

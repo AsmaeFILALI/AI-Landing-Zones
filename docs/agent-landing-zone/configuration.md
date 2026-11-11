@@ -32,7 +32,7 @@ environments that may contain secrets.
 ### Candidate retrieval and citation behavior
 
 The delivered customer platform branch selects the published fork commit
-`72204060a055ed6081d0cc4d08d221275e907d1f` for the orchestrator and aligns its
+`a825e0bd2d0a7930da55a5ef9f7d20e2d4b036e2` for the orchestrator and aligns its
 application definition. This behavior is not present in the original upstream
 pin. It takes effect only when deploying that selected custom revision; source
 publication and pin changes do not update a running application.
@@ -47,6 +47,9 @@ For the candidate `maf_lite` implementation, `CITATION_GUARD_MODE` defaults to
 assistant messages become plain label text, and repeated source links are
 simplified. The stored answer matches the sanitized stream. `log_only` preserves
 output and logs counts; `off` disables inspection; unknown values enforce.
+Overlong candidates stop buffering at the parser limit and have their opening
+delimiter rendered as literal text instead of active Markdown; `overlong`
+counts appear in the summary. Log-only/off modes retain the original output.
 Configure it through the component's supported App Configuration path, with
 the normal label precedence, and restart/reload as required by that revision.
 
